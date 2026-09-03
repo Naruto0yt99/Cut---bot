@@ -8,7 +8,7 @@ from flask import Flask
 import telebot
 from threading import Thread
 
-BOT_TOKEN = Os.environ.get
+BOT_TOKEN = BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 
