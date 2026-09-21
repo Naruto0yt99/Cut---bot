@@ -414,10 +414,48 @@ async def proactive_loop():
             print("Proactive loop error:",repr(exc))
         await asyncio.sleep(90)
 
+async def health_server():
+    """Small HTTP server so Render Web Service has a listening port."""
+    port = int(__import__("os").environ.get("PORT", "8080"))
+
+    async def handle(reader, writer):
+        try:
+            request = await asyncio.wait_for(reader.read(1024), timeout=2)
+            first_line = request.decode("utf-8", "ignore").splitlines()[0] if request else ""
+            path = first_line.split(" ")[1] if len(first_line.split(" ")) >= 2 else "/"
+            if path == "/healthz":
+                body = b"ok"
+                status = b"200 OK"
+            else:
+                body = b"Mimi is online"
+                status = b"200 OK"
+            response = (
+                b"HTTP/1.1 " + status + b"\\r\\n"
+                b"Content-Type: text/plain; charset=utf-8\\r\\n"
+                b"Content-Length: " + str(len(body)).encode() + b"\\r\\n"
+                b"Connection: close\\r\\n\\r\\n" + body
+            )
+            writer.write(response)
+            await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    server = await asyncio.start_server(handle, "0.0.0.0", port)
+    print(f"Health server listening on 0.0.0.0:{port}")
+    async with server:
+        await server.serve_forever()
+
 async def main():
     me=await bot.get_me()
     settings.bot_username=me.username or ""
     print(f"Bot online: @{settings.bot_username}")
+    asyncio.create_task(health_server())
     asyncio.create_task(proactive_loop())
     asyncio.create_task(birthday_loop(bot,social,memory))
     await dp.start_polling(bot,allowed_updates=dp.resolve_used_update_types())
