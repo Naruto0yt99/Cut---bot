@@ -57,7 +57,7 @@ Do not invent rules. If people are merely discussing a game, confidence should s
         if not data.get("is_game") or not data.get("name") or float(data.get("confidence",0))<0.60:
             return None
         gid=games.upsert(message.chat.id,data["name"],data.get("rules",""),"learned" if float(data["confidence"])>=0.85 else "learning",float(data["confidence"]),message.from_user.id)
-        for _,name,text in recent[-15:]:
+        for name,text in recent[-15:]:
             games.add_turn(gid,message.from_user.id,name,text)
         questions=data.get("missing_questions") or []
         if questions and float(data["confidence"])<0.90:
