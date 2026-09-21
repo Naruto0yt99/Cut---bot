@@ -11,11 +11,23 @@ async def birthday_loop(bot,social,memory):
             if today!=last_day:
                 last_day=today
                 with sqlite3.connect(social.path) as c:
-                    rows=c.execute("SELECT user_id,name FROM people WHERE birthday LIKE ?",(f"%{today}",)).fetchall()
+                    rows=c.execute(
+                        "SELECT user_id,name,birthday FROM people WHERE birthday LIKE ?",
+                        (f"%{today}",)
+                    ).fetchall()
+                birthday_users={row[0]:row[1] for row in rows}
                 for chat_id in memory.known_chats():
                     if chat_id>0:
                         continue
-                    for user_id,name in rows:
+                    with sqlite3.connect(social.path) as c:
+                        members=c.execute(
+                            "SELECT user_id FROM members WHERE chat_id=?",
+                            (chat_id,)
+                        ).fetchall()
+                    for (user_id,) in members:
+                        name=birthday_users.get(user_id)
+                        if not name:
+                            continue
                         text=f"Arre aaj {name} ka birthday haiii... 🎂🥳 Sab wish karooo..."
                         await bot.send_message(chat_id,text)
                         memory.add_bot_message(chat_id,text)
