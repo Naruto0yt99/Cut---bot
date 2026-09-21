@@ -79,24 +79,36 @@ def should_reply(message):
     text=(message.text or "").strip()
     if not text or text.startswith("/") or not message.from_user or message.from_user.is_bot:
         return False
-    # In a private chat, Mimi should behave like a normal 1-to-1 conversation.
-    # The random reply probability is only for group chatter.
+
+    # Private chat: every normal message is part of Mimi's 1-to-1 conversation.
     if message.chat.type == "private":
         return True
+
+    # Explicitly replying to Mimi or mentioning her username = guaranteed reply.
     if message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id==bot.id:
         return True
     if settings.bot_username and f"@{settings.bot_username.lower()}" in text.lower():
         return True
 
-    # If Mimi spoke immediately before this message, let Gemini decide whether
-    # the new message is a natural continuation directed at Mimi.
+    # Saying Mimi's name directly is also a guaranteed reply, even without @mention.
+    # This covers forms like "Mimi...", "Mimi ko...", "Mimi sun..." etc.
+    name_tokens=("mimi",)
+    words=set(__import__("re").findall(r"[a-zA-Z0-9_]+",text.lower()))
+    if any(name in words for name in name_tokens):
+        return True
+
+    # If Mimi just spoke, treat the next natural-looking message as an indirect
+    # continuation.  It gets a 70% chance instead of requiring Telegram reply.
     if message.chat.type != "private":
         recent=memory.recent(message.chat.id,3)
         if len(recent)>=2 and recent[-2][0]=="AI" and recent[-1][0]!="AI":
-            return True
+            return random.random()<0.70
 
+    # Game/challenge conversations are more likely to need Mimi's participation.
     if conversation_signal(message):
         return random.random()<0.72
+
+    # Ordinary group chatter stays selective so Mimi doesn't flood the chat.
     return random.random()<settings.reply_probability
 
 async def run_active_game(message:Message):
