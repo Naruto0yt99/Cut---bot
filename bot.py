@@ -40,7 +40,7 @@ async def ai_reply(message:Message, mode="normal", extra=""):
         if reply:
             # Keep the typing indicator visible for a human-like composition time.
             # Longer replies take longer; cap the delay so the bot never feels stuck.
-            typing_delay=min(10.0,max(1.0,len(reply)*0.045))
+            typing_delay=min(4.5,max(0.6,len(reply)*0.018))
             await asyncio.sleep(typing_delay)
         return reply
     finally:
