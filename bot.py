@@ -10,6 +10,7 @@ from sticker_store import StickerStore
 from sticker_pack import get_pack_stickers
 from game_memory import GameMemory
 from proactive import ProactiveState
+from scheduler import birthday_loop
 
 bot=Bot(settings.bot_token)
 dp=Dispatcher()
@@ -272,6 +273,7 @@ async def main():
     settings.bot_username=me.username or ""
     print(f"Bot online: @{settings.bot_username}")
     asyncio.create_task(proactive_loop())
+    asyncio.create_task(birthday_loop(bot,social,memory))
     await dp.start_polling(bot,allowed_updates=dp.resolve_used_update_types())
 
 if __name__=="__main__":
