@@ -1,2 +1,2 @@
-pyTelegramBotAPI
-Flask
+aiogram>=3.24,<4
+google-genai>=1.0
