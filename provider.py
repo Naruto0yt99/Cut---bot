@@ -1,28 +1,29 @@
 from google import genai
 from google.genai import types
-from personality import SYSTEM_PROMPT
 from config import settings
 
 client=genai.Client(api_key=settings.gemini_api_key)
 
-def generate_reply(current_name:str,current_text:str,recent,relevant):
-    recent_text="\n".join(f"{n}: {m}" for n,m in recent[-30:])
-    relevant_text="\n".join(f"{n}: {m}" for n,m in relevant)
-    prompt=f"""Current speaker: {current_name}
+async def call_ai(system_prompt,user,chat,current_text,recent,memories):
+    recent_text="\n".join(f"{name}: {text}" for name,text in recent)
+    memory_text="\n".join(f"{name}: {text}" for name,text in memories)
+    prompt=f"""Current speaker: {user.full_name}
 Current message: {current_text}
 
 Recent group conversation:
 {recent_text}
 
-Potentially relevant older memory:
-{relevant_text}
+Relevant memory for this member:
+{memory_text}
 
-Decide whether replying adds value. If not, return exactly NO_REPLY.
+Reply only if it is natural and useful in the current conversation. If not, return exactly NO_REPLY.
 """
-    r=client.models.generate_content(
+    response=await client.aio.models.generate_content(
         model=settings.gemini_model,
         contents=prompt,
-        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT,temperature=0.75,max_output_tokens=350)
+        config=types.GenerateContentConfig(system_instruction=system_prompt,temperature=0.75,max_output_tokens=350)
     )
-    out=(r.text or "").strip()
-    return "NO_REPLY" if out.upper()=="NO_REPLY" else out
+    out=(response.text or "").strip()
+    if out.upper()=="NO_REPLY" or not out:
+        return None
+    return out
