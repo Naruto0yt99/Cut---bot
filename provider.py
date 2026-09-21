@@ -20,7 +20,7 @@ async def _generate(model,prompt,system_instruction=""):
         config=types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=0.35,
-            max_output_tokens=500,
+            max_output_tokens=220,
         )
     )
 
