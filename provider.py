@@ -7,7 +7,7 @@ client=genai.Client(api_key=settings.gemini_api_key)
 
 # Gemini can occasionally return transient 503/UNAVAILABLE errors under load.
 # Keep the configured model as the primary model, then use a stable fallback.
-FALLBACK_MODEL="gemini-3.5-flash"
+FALLBACK_MODEL="gemini-2.5-flash-lite"
 
 def _is_transient(exc):
     text=str(exc).upper()
