@@ -1,54 +1,58 @@
-import os
-import subprocess
-import tempfile
-import glob
-import time
-import shutil
-import zipfile
-from flask import Flask
-import telebot
-from threading import Thread
+import asyncio, os, random
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import Command
+from aiogram.types import Message
+from config import settings
+from memory import MemoryStore
+from personality import SYSTEM_PROMPT, format_style
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-bot = telebot.TeleBot(BOT_TOKEN)
-app = Flask(__name__)
+bot = Bot(settings.bot_token)
+dp = Dispatcher()
+memory = MemoryStore(settings.database_url)
 
-@app.route('/')
-def alive():
-    return "1-Hour Splitter Ready - 30sec Clips"
+async def ai_reply(message: Message) -> str | None:
+    from provider import call_ai
+    recent = memory.recent(message.chat.id, 14)
+    memories = memory.relevant(message.chat.id, message.from_user.id, message.text or "")
+    return await call_ai(SYSTEM_PROMPT + "\n" + format_style(), message.from_user,
+                         message.chat, message.text or "", recent, memories)
 
-@bot.message_handler(commands=['start'])
-def start(m):
-    bot.reply_to(m, "Bhejo 1 hour ka episode! 🎬\nMai isko 30-30 sec ke clips me tod ke ZIP me dunga.")
+def should_reply(message: Message) -> bool:
+    text = (message.text or "").strip()
+    if not text or text.startswith("/") or not message.from_user or message.from_user.is_bot:
+        return False
+    if message.reply_to_message and message.reply_to_message.from_user:
+        if message.reply_to_message.from_user.id == bot.id:
+            return True
+    username = settings.bot_username
+    if username and f"@{username.lower()}" in text.lower():
+        return True
+    return random.random() < settings.reply_probability
 
-@bot.message_handler(content_types=['video', 'document'])
-def handle_video(m):
+@dp.message(Command("start"))
+async def start(message: Message):
+    await message.answer("Hii... main yahin hoon... 🌸\nMain AI bot hoon, group me friendly member ki tarah baat karne ke liye bani hoon...")
+
+@dp.message(F.text)
+async def text_message(message: Message):
+    if not message.from_user:
+        return
+    memory.add_message(message)
+    if not should_reply(message):
+        return
     try:
-        bot.reply_to(m, "Downloading... ⏳ 1 hour video hai to 1-2 min lagega")
-        file_id = m.video.file_id if m.video else m.document.file_id
-        file_info = bot.get_file(file_id)
-        downloaded = bot.download_file(file_info.file_path)
+        reply = await ai_reply(message)
+        if reply:
+            await message.reply(reply.strip())
+            memory.add_bot_message(message.chat.id, reply)
+    except Exception as exc:
+        print("AI error:", repr(exc))
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            input_path = os.path.join(tmpdir, "input.mp4")
-            with open(input_path, 'wb') as f:
-                f.write(downloaded)
+async def main():
+    me = await bot.get_me()
+    settings.bot_username = me.username or ""
+    print(f"Bot online: @{settings.bot_username}")
+    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
-            # Duration nikalo
-            try:
-                result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input_path], capture_output=True, text=True)
-                duration = float(result.stdout.strip())
-            except:
-                duration = 3600 # fallback 1 hour
-
-            bot.reply_to(m, f"Video mil gaya {int(duration)} sec ka. Ab 30sec clips bana raha hu... ✂️")
-
-            clips_dir = os.path.join(tmpdir, "clips")
-            os.makedirs(clips_dir, exist_ok=True)
-
-            clip_paths = []
-            start_time = 0
-            clip_num = 1
-            while start_time < duration:
-                out_path = os.path.join(clips_dir, f"clip_{clip_num:03d}.mp4")
-                # re-encode for perfect
+if __name__ == "__main__":
+    asyncio.run(main())
