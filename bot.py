@@ -36,7 +36,13 @@ async def ai_reply(message:Message, mode="normal", extra=""):
     from provider import call_ai
     typing_task=asyncio.create_task(_typing_loop(message.chat.id))
     try:
-        return await _ai_reply_body(message,mode,extra)
+        reply=await _ai_reply_body(message,mode,extra)
+        if reply:
+            # Keep the typing indicator visible for a human-like composition time.
+            # Longer replies take longer; cap the delay so the bot never feels stuck.
+            typing_delay=min(10.0,max(1.0,len(reply)*0.045))
+            await asyncio.sleep(typing_delay)
+        return reply
     finally:
         typing_task.cancel()
 
