@@ -54,6 +54,10 @@ def should_reply(message):
     text=(message.text or "").strip()
     if not text or text.startswith("/") or not message.from_user or message.from_user.is_bot:
         return False
+    # In a private chat, Mimi should behave like a normal 1-to-1 conversation.
+    # The random reply probability is only for group chatter.
+    if message.chat.type == "private":
+        return True
     if message.reply_to_message and message.reply_to_message.from_user and message.reply_to_message.from_user.id==bot.id:
         return True
     if settings.bot_username and f"@{settings.bot_username.lower()}" in text.lower():
