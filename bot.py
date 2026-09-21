@@ -32,7 +32,44 @@ async def ai_reply(message:Message, mode="normal", extra=""):
 
 def conversation_signal(message):
     t=(message.text or "").lower()
-    return any(x in t for x in ("game","khel","kaise start","rules","turn","guess","round","score","chal"))
+    return any(x in t for x in ("game","khel","kaise start","rules","turn","guess","round","score","chal","playing","khel rahe","match","quiz","puzzle","challenge"))
+
+def looks_like_game_activity(message):
+    t=(message.text or "").lower()
+    return conversation_signal(message) or bool(message.reply_to_message and message.reply_to_message.text and
+        any(x in message.reply_to_message.text.lower() for x in ("game","khel","turn","guess","round","score","quiz","puzzle")))
+
+async def maybe_join_game(message):
+    active=games.active_session(message.chat.id)
+    if active:
+        return False
+    recent=memory.recent(message.chat.id,12)
+    if len(recent)<3 or not looks_like_game_activity(message):
+        return False
+    from provider import raw_ai
+    transcript="\n".join(f"{n}: {t}" for n,t in recent)
+    prompt=f"""Decide whether people are actively playing a known Telegram game.
+Known games: {games.recent_games(message.chat.id)}
+Recent chat:
+{transcript}
+Return JSON only: {{"playing":true/false,"game_name":"name or empty","confidence":0.0}}
+Do not infer a game merely from the word 'game'."""
+    try:
+        data=json.loads(await raw_ai(prompt))
+        if not data.get("playing") or float(data.get("confidence",0))<0.88:
+            return False
+        name=data.get("game_name","")
+        row=games.find(message.chat.id,name) if name else None
+        if not row or row[3]!="learned" or row[4]<0.85:
+            return False
+        session=games.start_session(row[0],message.chat.id)
+        games.add_turn(row[0],message.from_user.id,message.from_user.full_name,"bot joined observed game")
+        await message.reply(f"Achaaa... ye {row[1]} wala game chal raha hai 😭🎮 Main bhi join kar rahi hoon...")
+        await run_active_game(message)
+        return True
+    except Exception as exc:
+        print("Game join detection error:",repr(exc))
+        return False
 
 def should_reply(message):
     text=(message.text or "").strip()
@@ -243,6 +280,7 @@ async def text_message(message:Message):
             return
 
     if await run_active_game(message): return
+    if await maybe_join_game(message): return
     if not should_reply(message): return
     try:
         reply=await ai_reply(message)
