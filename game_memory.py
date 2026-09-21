@@ -15,6 +15,11 @@ class GameMemory:
                 user_id INTEGER, speaker TEXT, text TEXT, created_at REAL)""")
             c.execute("CREATE INDEX IF NOT EXISTS idx_game_chat ON games(chat_id,updated_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_game_turns ON game_turns(game_id,created_at)")
+            c.execute("""CREATE TABLE IF NOT EXISTS game_sessions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL, status TEXT DEFAULT 'active',
+                current_player INTEGER, state TEXT DEFAULT '', started_at REAL, updated_at REAL)""")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_game_sessions ON game_sessions(chat_id,status)")
 
     def find(self, chat_id, name):
         with sqlite3.connect(self.path) as c:
@@ -42,3 +47,22 @@ class GameMemory:
         with sqlite3.connect(self.path) as c:
             rows=c.execute("SELECT user_id,speaker,text FROM game_turns WHERE game_id=? ORDER BY id DESC LIMIT ?",(game_id,limit)).fetchall()
         return list(reversed(rows))
+
+    def start_session(self,game_id,chat_id):
+        now=time.time()
+        with sqlite3.connect(self.path) as c:
+            c.execute("UPDATE game_sessions SET status='finished',updated_at=? WHERE chat_id=? AND status='active'",(now,chat_id))
+            cur=c.execute("INSERT INTO game_sessions(game_id,chat_id,status,started_at,updated_at) VALUES(?,?,?,?,?)",(game_id,chat_id,"active",now,now))
+            return cur.lastrowid
+
+    def active_session(self,chat_id):
+        with sqlite3.connect(self.path) as c:
+            return c.execute("SELECT id,game_id,status,current_player,state FROM game_sessions WHERE chat_id=? AND status='active' ORDER BY id DESC LIMIT 1",(chat_id,)).fetchone()
+
+    def update_session(self,session_id,current_player,state):
+        with sqlite3.connect(self.path) as c:
+            c.execute("UPDATE game_sessions SET current_player=?,state=?,updated_at=? WHERE id=?",(current_player,state,time.time(),session_id))
+
+    def finish_session(self,session_id):
+        with sqlite3.connect(self.path) as c:
+            c.execute("UPDATE game_sessions SET status='finished',updated_at=? WHERE id=?",(time.time(),session_id))
