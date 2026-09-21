@@ -37,19 +37,8 @@ async def ai_reply(message:Message, mode="normal", extra=""):
     typing_task=asyncio.create_task(_typing_loop(message.chat.id))
     try:
         reply=await _ai_reply_body(message,mode,extra)
-        if reply:
-            # Keep the typing indicator visible for a human-like composition time.
-            # Longer replies take longer; cap the delay so the bot never feels stuck.
-            # Fast human-like pacing: short replies almost instant, normal replies ~1s,
-            # and longer replies naturally take 5-10s to compose.
-            n=len(reply)
-            if n <= 35:
-                typing_delay=0.1
-            elif n <= 140:
-                typing_delay=1.0
-            else:
-                typing_delay=min(10.0, max(5.0, 5.0 + (n-140)/120.0))
-            await asyncio.sleep(typing_delay)
+        # No artificial post-generation delay: send as soon as Gemini returns.
+        # The typing indicator already runs while Gemini is generating.
         return reply
     finally:
         typing_task.cancel()
