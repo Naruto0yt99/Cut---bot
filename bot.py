@@ -76,6 +76,30 @@ async def game(message:Message):
     known=games.recent_games(message.chat.id)
     await message.answer(("Mujhe ye games yaad hain... 🎮\n"+", ".join(x[1] for x in known[:8])) if known else "Abhi koi game properly learn nahi hua... examples dikhao, main rules samajhungi... 👀")
 
+@dp.message(Command("play"))
+async def play_game(message:Message):
+    known=games.recent_games(message.chat.id)
+    if not known:
+        await message.answer("Abhi koi game saved nahi hai... pehle mujhe game samajhne do 👀")
+        return
+    game=known[0]
+    if game[3]!="learned" or game[4]<0.85:
+        await message.answer("Is game ko abhi poora nahi samjhi hoon... ek-do cheez aur dikha do, phir properly khelenge 🎮")
+        return
+    session=games.start_session(game[0],message.chat.id)
+    games.add_turn(game[0],message.from_user.id,message.from_user.full_name,"started game")
+    await message.answer(f"Chalo {game[1]} khelte hain... 🎮")
+    await run_active_game(message)
+
+@dp.message(Command("stopgame"))
+async def stop_game(message:Message):
+    active=games.active_session(message.chat.id)
+    if active:
+        games.finish_session(active[0])
+        await message.answer("Theek hai... game pause kar diya 😌")
+    else:
+        await message.answer("Abhi koi active game nahi hai...")
+
 @dp.message(Command("games"))
 async def games_cmd(message:Message):
     known=games.recent_games(message.chat.id)
@@ -105,6 +129,7 @@ async def text_message(message:Message):
             memory.add_bot_message(message.chat.id,learned_reply)
             return
 
+    if await run_active_game(message): return
     if not should_reply(message): return
     try:
         reply=await ai_reply(message)
