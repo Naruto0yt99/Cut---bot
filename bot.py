@@ -1,8 +1,9 @@
 import asyncio, random, json, time
 from datetime import timedelta
 from aiogram import Bot, Dispatcher, F
+from aiogram.enums import ChatAction
 from aiogram.filters import Command
-from aiogram.types import Message, ChatPermissions, ChatAction
+from aiogram.types import Message, ChatPermissions
 from config import settings
 from memory import MemoryStore
 from social_memory import SocialMemory
@@ -85,7 +86,7 @@ def should_reply(message):
     # the new message is a natural continuation directed at Mimi.
     if message.chat.type != "private":
         recent=memory.recent(message.chat.id,3)
-        if recent and recent[-1][0]=="AI":
+        if len(recent)>=2 and recent[-2][0]=="AI" and recent[-1][0]!="AI":
             return True
 
     if conversation_signal(message):
