@@ -1,7 +1,7 @@
 import asyncio, random, json, time
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, ChatPermissions
 from config import settings
 from memory import MemoryStore
 from social_memory import SocialMemory
@@ -68,6 +68,118 @@ Do not invent rules. If people are merely discussing a game, confidence should s
         return None
 
 @dp.message(Command("start"))
+async def is_admin(message:Message):
+    if not message.from_user or message.chat.type=="private":
+        return False
+    try:
+        member=await bot.get_chat_member(message.chat.id,message.from_user.id)
+        return member.status in ("creator","administrator")
+    except Exception:
+        return False
+
+def target_user(message:Message):
+    if message.reply_to_message and message.reply_to_message.from_user:
+        return message.reply_to_message.from_user
+    return None
+
+@dp.message(Command("birthday"))
+async def birthday(message:Message):
+    target=target_user(message) or message.from_user
+    parts=(message.text or "").split(maxsplit=1)
+    if len(parts)<2:
+        profile=social.member(message.chat.id,target.id)
+        date=profile[3] if profile else ""
+        await message.answer(f"Birthday: {date or 'abhi yaad nahi hai...'}")
+        return
+    date=parts[1].strip()
+    social.set_birthday(message.chat.id,target.id,date)
+    await message.answer(f"Yaad rakh liya... 🎂 {target.full_name} ka birthday {date} hai...")
+
+@dp.message(Command("mute"))
+async def mute(message:Message):
+    if not await is_admin(message):
+        await message.answer("Ye command sirf actual group admins use kar sakte hain...")
+        return
+    target=target_user(message)
+    if not target:
+        await message.answer("Jisko mute karna hai uske message ko reply karke /mute [minutes] bhejo...")
+        return
+    parts=(message.text or "").split()
+    minutes=10
+    if len(parts)>1:
+        try: minutes=max(1,min(int(parts[1]),1440))
+        except ValueError: pass
+    try:
+        await bot.restrict_chat_member(message.chat.id,target.id,
+            permissions=ChatPermissions(can_send_messages=False),
+            until_date=time.time()+minutes*60)
+        await message.answer(f"{target.full_name} ko {minutes} min ke liye mute kar diya...")
+    except Exception as exc:
+        await message.answer("Mute nahi ho paya... bot ko restrict-members permission chahiye.")
+        print("Mute error:",repr(exc))
+
+@dp.message(Command("unmute"))
+async def unmute(message:Message):
+    if not await is_admin(message):
+        await message.answer("Ye command sirf actual group admins use kar sakte hain...")
+        return
+    target=target_user(message)
+    if not target:
+        await message.answer("Unmute ke liye target ke message ko reply karo...")
+        return
+    try:
+        await bot.restrict_chat_member(message.chat.id,target.id,
+            permissions=ChatPermissions(can_send_messages=True,can_send_audios=True,can_send_documents=True,
+            can_send_photos=True,can_send_videos=True,can_send_video_notes=True,can_send_voice_notes=True,
+            can_send_polls=True,can_send_other_messages=True,can_add_web_page_previews=True,can_change_info=False,
+            can_invite_users=True,pin_messages=False))
+        await message.answer(f"{target.full_name} ko unmute kar diya...")
+    except Exception as exc:
+        await message.answer("Unmute nahi ho paya... bot ki group permissions check karo.")
+        print("Unmute error:",repr(exc))
+
+@dp.message(Command("ban"))
+async def ban(message:Message):
+    if not await is_admin(message):
+        await message.answer("Ye command sirf actual group admins use kar sakte hain...")
+        return
+    target=target_user(message)
+    if not target:
+        await message.answer("Ban ke liye target ke message ko reply karo...")
+        return
+    try:
+        await bot.ban_chat_member(message.chat.id,target.id)
+        await message.answer(f"{target.full_name} ko group se ban kar diya...")
+    except Exception as exc:
+        await message.answer("Ban nahi ho paya... bot ko ban-users permission chahiye.")
+        print("Ban error:",repr(exc))
+
+@dp.message(Command("unban"))
+async def unban(message:Message):
+    if not await is_admin(message):
+        await message.answer("Ye command sirf actual group admins use kar sakte hain...")
+        return
+    target=target_user(message)
+    if not target:
+        await message.answer("Unban ke liye user ke message ko reply karo...")
+        return
+    try:
+        await bot.unban_chat_member(message.chat.id,target.id,only_if_banned=True)
+        await message.answer(f"{target.full_name} ko unban kar diya...")
+    except Exception as exc:
+        await message.answer("Unban nahi ho paya...")
+        print("Unban error:",repr(exc))
+
+@dp.message(Command("profile"))
+async def profile(message:Message):
+    target=target_user(message) or message.from_user
+    row=social.member(message.chat.id,target.id)
+    if not row:
+        await message.answer("Abhi is member ki memory me kuch saved nahi hai...")
+        return
+    name,username,facts,bday=row
+    await message.answer(f"👤 {name}\nUsername: @{username or 'none'}\n🎂 {bday or 'unknown'}\n🧠 {facts or 'abhi koi saved fact nahi...'}")
+
 async def start(message:Message):
     await message.answer("Hii... main yahin hoon... 🌸\nMain AI bot hoon... group me friendly member ki tarah baat karne ke liye bani hoon...")
 
