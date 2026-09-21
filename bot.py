@@ -2,7 +2,7 @@ import asyncio, random, json, time
 from datetime import timedelta
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
-from aiogram.types import Message, ChatPermissions
+from aiogram.types import Message, ChatPermissions, ChatAction
 from config import settings
 from memory import MemoryStore
 from social_memory import SocialMemory
@@ -21,7 +21,25 @@ stickers=StickerStore(settings.database_url)
 games=GameMemory(settings.database_url)
 proactive=ProactiveState()
 
+async def _typing_loop(chat_id):
+    try:
+        while True:
+            await bot.send_chat_action(chat_id, ChatAction.TYPING)
+            await asyncio.sleep(4)
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        print("Typing action error:",repr(exc))
+
 async def ai_reply(message:Message, mode="normal", extra=""):
+    from provider import call_ai
+    typing_task=asyncio.create_task(_typing_loop(message.chat.id))
+    try:
+        return await _ai_reply_body(message,mode,extra)
+    finally:
+        typing_task.cancel()
+
+async def _ai_reply_body(message:Message, mode="normal", extra=""):
     from provider import call_ai
     recent=memory.recent(message.chat.id,30)
     memories=memory.relevant(message.chat.id,message.from_user.id,message.text or "",18)
@@ -62,6 +80,14 @@ def should_reply(message):
         return True
     if settings.bot_username and f"@{settings.bot_username.lower()}" in text.lower():
         return True
+
+    # If Mimi spoke immediately before this message, let Gemini decide whether
+    # the new message is a natural continuation directed at Mimi.
+    if message.chat.type != "private":
+        recent=memory.recent(message.chat.id,3)
+        if recent and recent[-1][0]=="AI":
+            return True
+
     if conversation_signal(message):
         return random.random()<0.72
     return random.random()<settings.reply_probability
@@ -382,7 +408,14 @@ async def text_message(message:Message):
     if not should_reply(message):
         return
     try:
-        reply=await ai_reply(message)
+        reply=await ai_reply(
+            message,
+            extra=(
+                "If the current message is a natural answer/follow-up to Mimi's "
+                "most recent message, respond naturally even without Telegram reply. "
+                "If it is clearly addressed to another person or unrelated, return NO_REPLY."
+            )
+        )
         if reply:
             await message.reply(reply.strip())
             memory.add_bot_message(message.chat.id,reply)
