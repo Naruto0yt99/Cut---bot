@@ -4,6 +4,14 @@ from config import settings
 
 client=genai.Client(api_key=settings.gemini_api_key)
 
+async def raw_ai(prompt, system_instruction=""):
+    response=await client.aio.models.generate_content(
+        model=settings.gemini_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(system_instruction=system_instruction,temperature=0.35,max_output_tokens=500)
+    )
+    return (response.text or "").strip()
+
 async def call_ai(system_prompt,user,chat,current_text,recent,memories):
     recent_text="\n".join(f"{name}: {text}" for name,text in recent)
     memory_text="\n".join(f"{name}: {text}" for name,text in memories)
@@ -18,12 +26,7 @@ Relevant memory for this member:
 
 Reply only if it is natural and useful in the current conversation. If not, return exactly NO_REPLY.
 """
-    response=await client.aio.models.generate_content(
-        model=settings.gemini_model,
-        contents=prompt,
-        config=types.GenerateContentConfig(system_instruction=system_prompt,temperature=0.75,max_output_tokens=350)
-    )
-    out=(response.text or "").strip()
+    out=await raw_ai(prompt,system_prompt)
     if out.upper()=="NO_REPLY" or not out:
         return None
     return out
